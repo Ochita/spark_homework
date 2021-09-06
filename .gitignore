@@ -110,6 +110,6 @@ venv.bak/
 .DS_Store
 
 # spark meta
-**/derby.log
-**/metastore_db/
-**/spark-warehouse/
+derby.log
+metastore_db/
+spark-warehouse/

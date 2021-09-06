@@ -1,0 +1,10 @@
+{
+  "app_name": "HotelsBatchHW",
+  "hdfs": "sandbox-hdp.hortonworks.com:8020",
+  "expedia_data_path": "/dataset/expedia/*",
+  "output_data_path": "/dataset/output",
+  "stats_path": "/dataset/stats.csv",
+  "kafka": "sandbox-hdp.hortonworks.com:6667",
+  "hotels_topic": "hotels",
+  "weather_topic": "weather"
+}

@@ -1,0 +1,6 @@
+pyspark==2.3.1
+pandas==0.24.2
+pytest==4.6.11
+pytest-cov==2.12.1
+pytest-mock==2.0.0
+pytest-spark==0.6.0
