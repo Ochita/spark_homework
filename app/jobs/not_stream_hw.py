@@ -3,7 +3,7 @@ from pyspark.sql.window import Window
 from pyspark.sql.types import *
 from batch_hw import _extract_hotels_topic, _extract_hotels_data, _join_hotels_data, _extract_expedia, \
     _convert_types, _swap_ci_co
-from shared.udfs import get_array_udf
+from shared.udfs import get_array_udf, get_geohash_udf
 
 
 # def _extract_weather_topic(spark, config):
@@ -31,7 +31,8 @@ from shared.udfs import get_array_udf
 
 def _extract_weather_data(spark, config):
     return spark.read.option("mergeSchema", "true") \
-        .parquet("hdfs://" + config['hdfs'] + config["weather_data_path"])
+        .parquet("hdfs://" + config['hdfs'] + config["weather_data_path"]) \
+        .withColumn("geohash", get_geohash_udf('lat', 'lng'))
 
 
 def _group_weather_data(raw_df):
@@ -78,7 +79,7 @@ def _join_temps(avg_tmpr_df, exp_df):
 def _add_stay_type(raw_df):
     return raw_df.withColumn("stayType", when(col("days") == 1, "short_stay")
                              .when((col("days") >= 2) & (col("days") < 7), "standard_stay")
-                             .when((col("days") >= 7) & (col("days") < 14), "standart_extended_stay")
+                             .when((col("days") >= 7) & (col("days") < 14), "standard_extended_stay")
                              .when((col("days") >= 14) & (col("days") <= 30), "long_stay")
                              .otherwise("erroneous_data")
                              )
@@ -91,11 +92,16 @@ def _add_children_flag(raw_df):
 def _calc_stats(raw_df):
     window_spec = Window.partitionBy("Name")
     name_grp_df = raw_df.groupBy("Name", "stayType").agg(
-            first(col("with_children")).alias("with_children"),
+            max(col("with_children")).alias("with_children"),
             count(col("stayType")).alias("count")
-        ).withColumn("max_stay_count", max("count").over(window_spec))
+        ).withColumn("max_stay_count", max("count").over(window_spec)) \
+        .withColumn("with_children", max("with_children").over(window_spec))
 
-    pivot = name_grp_df.groupBy("Name", "with_children").pivot("stayType").agg(first(col("count")))
+    pivot = name_grp_df.groupBy("Name", "with_children").pivot("stayType",  # boost performance by list possible values
+                                                               ["short_stay", "standard_stay",
+                                                                "standard_extended_stay", "long_stay",
+                                                                "erroneous_data"]) \
+        .agg(first(col("count"))).fill(0)  # replace nulls by zeros
     return pivot.join(
         name_grp_df.select("Name", col("stayType").alias("most_popular_stay_type"))
         .where(col("count") == col("max_stay_count")),
@@ -109,9 +115,9 @@ def _load_data(result_df, config):
     result_df.select(col("Name").alias('name'),
                      "with_children",
                      col("erroneous_data").alias("erroneous_data_cnt"),
-                     col("short_stay").alia("short_stay_cnt"),
-                     col("standart_stay").alias("standart_stay_cnt"),
-                     col("standart_extended_stay").alias("standart_extended_stay_cnt"),
+                     col("short_stay").alias("short_stay_cnt"),
+                     col("standard_stay").alias("standard_stay_cnt"),
+                     col("standard_extended_stay").alias("standard_extended_stay_cnt"),
                      col("long_stay").alias("long_stay_cnt"),
                      "most_popular_stay_type") \
         .write.mode("overwrite") \
@@ -122,20 +128,13 @@ def run_job(spark, config):
     """ Run job pipline """
     exp_df = _swap_ci_co(_convert_types(_extract_expedia(spark, config)))
     hotels_df = _extract_hotels_data(_extract_hotels_topic(spark, config))
-    hotels_exp_dff = _join_hotels_data(exp_df, hotels_df).persist()
-    hotels_exp_dff.show(50)
+    hotels_exp_dff = _join_hotels_data(exp_df, hotels_df).persist()  # persist before double use
     big_df = _explode_dates(hotels_exp_dff)
-    big_df.show(50)
     weather_df = _group_weather_data(_extract_weather_data(spark, config))
-    weather_df.show(50)
     hotel_weather_df = _join_geohash_weather_data(big_df, weather_df)
-    hotel_weather_df.show(50)
     avg_tmp_df = _fiter_by_tmpr(_calc_avg_temp(hotel_weather_df))
-    avg_tmp_df.show(50)
     tmpr_exp_df = _join_temps(avg_tmp_df, hotels_exp_dff)
-    tmpr_exp_df.show(50)
-    extended_exp_df = _add_children_flag(_add_stay_type(tmpr_exp_df))
-    extended_exp_df.show(50)
+    extended_exp_df = _add_children_flag(_add_stay_type(tmpr_exp_df)).persist()  # persist before multiple uses
     result_df = _calc_stats(extended_exp_df)
     result_df.show(50)
-    _load_data(result_df, config)
+    # _load_data(result_df, config)

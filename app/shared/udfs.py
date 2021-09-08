@@ -2,6 +2,7 @@ import os
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StringType, ArrayType, IntegerType
 import datetime
+import geohash
 
 
 def _get_year(data):
@@ -28,5 +29,16 @@ def _get_array(num):
     return []
 
 
+def _get_geohash(lat, lon):
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except ValueError:
+        pass
+    else:
+        return geohash.encode(lat, lon, precision=4)
+
+
 get_year_udf = udf(_get_year, StringType())
 get_array_udf = udf(_get_array, ArrayType(IntegerType()))
+get_geohash_udf = udf(_get_geohash, StringType())
