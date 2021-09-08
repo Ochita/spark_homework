@@ -6,28 +6,32 @@ from batch_hw import _extract_hotels_topic, _extract_hotels_data, _join_hotels_d
 from shared.udfs import get_array_udf
 
 
-def _extract_weather_topic(spark, config):
-    """ Load hotels messages from kafka """
-    return spark.read.format("kafka") \
-        .option("kafka.bootstrap.servers", config['kafka']) \
-        .option("subscribe", config['weather_topic']) \
-        .load()
+# def _extract_weather_topic(spark, config):
+#     """ Load weather messages from kafka """
+#     return spark.read.format("kafka") \
+#         .option("kafka.bootstrap.servers", config['kafka']) \
+#         .option("subscribe", config['weather_topic']) \
+#         .load()
+#
+#
+# def _extract_weather_data(raw_df):
+#     """ Convert kafka messages"""
+#     schema = StructType() \
+#         .add("geohash", StringType()) \
+#         .add("lng", DoubleType()) \
+#         .add("lat", DoubleType()) \
+#         .add("avg_tmpr_f", DoubleType()) \
+#         .add("avg_tmpr_c", DoubleType()) \
+#         .add("wthr_date", StringType()) \
+#         .add("year", StringType()) \
+#         .add("month", StringType()) \
+#         .add("day", StringType())
+#     return raw_df.select(from_json(col("Value").cast("string"), schema).alias("data")) \
+#         .select('data.*')
 
-
-def _extract_weather_data(raw_df):
-    """ Convert kafka messages"""
-    schema = StructType() \
-        .add("geohash", StringType()) \
-        .add("lng", DoubleType()) \
-        .add("lat", DoubleType()) \
-        .add("avg_tmpr_f", DoubleType()) \
-        .add("avg_tmpr_c", DoubleType()) \
-        .add("wthr_date", StringType()) \
-        .add("year", StringType()) \
-        .add("month", StringType()) \
-        .add("day", StringType())
-    return raw_df.select(from_json(col("Value").cast("string"), schema).alias("data")) \
-        .select('data.*')
+def _extract_weather_data(spark, config):
+    return spark.read.option("mergeSchema", "true") \
+        .parquet("hdfs://" + config['hdfs'] + config["weather_data_path"])
 
 
 def _group_weather_data(raw_df):
@@ -122,7 +126,7 @@ def run_job(spark, config):
     hotels_exp_dff.show(50)
     big_df = _explode_dates(hotels_exp_dff)
     big_df.show(50)
-    weather_df = _group_weather_data(_extract_weather_data(_extract_weather_topic(spark, config)))
+    weather_df = _group_weather_data(_extract_weather_data(spark, config))
     weather_df.show(50)
     hotel_weather_df = _join_geohash_weather_data(big_df, weather_df)
     hotel_weather_df.show(50)
