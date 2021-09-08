@@ -136,5 +136,4 @@ def run_job(spark, config):
     tmpr_exp_df = _join_temps(avg_tmp_df, hotels_exp_dff)
     extended_exp_df = _add_children_flag(_add_stay_type(tmpr_exp_df)).persist()  # persist before multiple uses
     result_df = _calc_stats(extended_exp_df)
-    result_df.show(50)
-    # _load_data(result_df, config)
+    _load_data(result_df, config)
