@@ -101,7 +101,7 @@ def _calc_stats(raw_df):
                                                                ["short_stay", "standard_stay",
                                                                 "standard_extended_stay", "long_stay",
                                                                 "erroneous_data"]) \
-        .agg(first(col("count"))).fill(0)  # replace nulls by zeros
+        .agg(first(col("count"))).fillna(0)  # replace nulls by zeros
     return pivot.join(
         name_grp_df.select("Name", col("stayType").alias("most_popular_stay_type"))
         .where(col("count") == col("max_stay_count")),
